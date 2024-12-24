@@ -29,8 +29,6 @@ requests==2.32.3
 beautifulsoup4==4.12.3
 ```
 
-*(Adjust versions as needed.)*
-
 ## Usage
 
 1. Run the scraper:
@@ -70,10 +68,6 @@ Example of a header row:
 ```
 Number;Name;Voters in the list;Issued envelopes;Valid votes;Občanská demokratická strana;Česká pirátská strana;...
 ```
-
-## Contributing
-
-Feel free to open pull requests or issues if you find any bugs or wish to propose improvements.
 
 ## License
 
