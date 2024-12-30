@@ -88,4 +88,4 @@ Code;Location;Registered;Envelopes;Valid;...
 
 ## License
 
-No explicit license is provided. You can consider applying a permissive license such as [MIT License](https://opensource.org/licenses/MIT).
+This project is licensed under the [MIT License](LICENSE).
