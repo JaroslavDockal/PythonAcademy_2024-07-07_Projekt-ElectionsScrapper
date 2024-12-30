@@ -19,7 +19,7 @@ def main():
     Entry point of the script.
 
     Usage:
-        python scraper.py <URL> <output_file.csv>
+        python ElectionsScraper.py <URL> <output_file.csv>
 
     This script checks if the provided URL contains 'volby.cz'.
     If valid, it calls `download_data(url)` to scrape either:
@@ -29,21 +29,30 @@ def main():
 
     Finally, the data is saved as a CSV file (UTF-8 with BOM) by `save_to_csv()`.
     """
-    if len(sys.argv) != 3:
-        print("Usage: python scraper.py <URL> <output_file.csv>")
-        sys.exit(1)
+    try:
+        if len(sys.argv) != 3:
+            print("Error: Wrong number of arguments.")
+            print("Usage: python ElectionsScraper.py <URL> <output_file.csv>")
+            sys.exit(1)
 
-    url = sys.argv[1]
-    output_file = sys.argv[2]
+        url = sys.argv[1]
+        output_file = sys.argv[2]
 
-    if "volby.cz" not in url:
-        print("Error: Provide a valid volby.cz URL (with or without 'www').")
-        sys.exit(1)
+        if "volby.cz" not in url:
+            print("Error: Provide a valid volby.cz URL (with or without 'www').")
+            sys.exit(1)
 
-    data = download_data(url)
-    save_to_csv(data, output_file, url)
-    print(f"Data saved to {output_file}")
+        print(f"Downloading data from the provided URL: {url}")
 
+        data = download_data(url)
+        save_to_csv(data, output_file, url)
+        print(f"Data successfully saved to: {output_file}")
+        print("Program closed!")
+        print("-" * 50)
+
+    except KeyboardInterrupt:
+        print("\nProcess interrupted by user.")
+        sys.exit(0)
 
 def download_data(url):
     """
@@ -60,13 +69,18 @@ def download_data(url):
     Returns:
         list of dict: Each dictionary represents one municipality/region.
                       Keys typically include:
-                        "Number", "Name", "Voters in the list",
-                        "Issued envelopes", "Valid votes",
+                        "Code", "Location",
+                        "Registered", "Envelopes", "Valid",
                         plus any party names with their vote counts.
     """
     try:
         r = requests.get(url)
         r.raise_for_status()
+
+        if "Page not found!" in r.text:
+            print("Error: The page indicates it was not found. The URL might be wrong.")
+            sys.exit(1)
+
         soup = BeautifulSoup(r.text, 'html.parser')
         rows = soup.find_all('tr')
         data_list = []
@@ -93,8 +107,8 @@ def download_data(url):
                 detail_url = unify_url_domain(url, link['href'])
                 detail_data = scrape_detail(detail_url)
                 row_dict = {
-                    "Number": code,
-                    "Name": location
+                    "Code": code,
+                    "Location": location
                 }
                 row_dict.update(detail_data)
                 data_list.append(row_dict)
@@ -104,8 +118,12 @@ def download_data(url):
             data_list.append(detail_data)
 
         return data_list
+
+    except requests.exceptions.RequestException as e:
+        print(f"Network-related error: {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"An error occurred while downloading or parsing the data: {e}")
         sys.exit(1)
 
 
@@ -115,7 +133,7 @@ def scrape_detail(detail_url):
 
     It expects:
       - A summary table (usually the first <table>) containing data such as:
-          "Voters in the list", "Issued envelopes", "Valid votes"
+          "Registered", "Envelopes", "Valid"
         at specific <td> indices (3, 4, and 7) based on the 2017 election layout.
       - One or more subsequent tables (index >= 1) that list parties and their vote counts.
         Each party is found in row <td>[1] (party name) and <td>[2] (vote count).
@@ -123,9 +141,9 @@ def scrape_detail(detail_url):
     Returns:
         dict: A dictionary with keys like:
               {
-                "Voters in the list": <str>,
-                "Issued envelopes": <str>,
-                "Valid votes": <str>,
+                "Registered": <str>,
+                "Envelopes": <str>,
+                "Valid": <str>,
                 "<Party Name A>": <str>,  # e.g. "123"
                 "<Party Name B>": <str>,
                 ...
@@ -133,27 +151,32 @@ def scrape_detail(detail_url):
               Some fields may be missing if they are not found in the HTML structure.
     """
     result = {}
-    r = requests.get(detail_url)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, 'html.parser')
-
-    tables = soup.find_all('table')
-    if not tables:
-        return result
-
-    # Extract summary data from the first table
     try:
+        r = requests.get(detail_url)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, 'html.parser')
+
+        tables = soup.find_all('table')
+        if not tables:
+            return result
+
+        # Extract summary data from the first table
         summary_rows = tables[0].find_all("tr")
         if len(summary_rows) > 2:
             tds = summary_rows[2].find_all("td")
             voters = tds[3].get_text(strip=True).replace('\xa0','')
             envelopes = tds[4].get_text(strip=True).replace('\xa0','')
             valid = tds[7].get_text(strip=True).replace('\xa0','')
-            result["Voters in the list"] = voters
-            result["Issued envelopes"] = envelopes
-            result["Valid votes"] = valid
+            result["Registered"] = voters
+            result["Envelopes"] = envelopes
+            result["Valid"] = valid
+
+    except requests.exceptions.RequestException as e:
+        print(f"Network-related error while scraping detail: {e}")
+    except Exception as e:
+        print(f"Error occurred while scraping the detail page: {e}")
     except (IndexError, AttributeError):
-        # If the table or cells are not in the expected format
+        print(f"Error: Unexpected table structure in URL: {detail_url}")
         pass
 
     # Extract party data from subsequent tables
@@ -165,7 +188,7 @@ def scrape_detail(detail_url):
                 continue
             name = tds[1].get_text(strip=True)
             votes = tds[2].get_text(strip=True).replace('\xa0','')
-            if name:
+            if name and name != "-":
                 result[name] = votes
 
     return result
@@ -190,8 +213,8 @@ def save_to_csv(data, output_file, src_url):
     Steps:
       1. Collect all unique keys from the entire dataset.
       2. Prioritize the following keys in the header order:
-         "Number", "Name", "Voters in the list", "Issued envelopes", "Valid votes"
-      3. Sort all remaining keys alphabetically (usually party names).
+         "Code", "Location", "Registered", "Envelopes", "Valid"
+      3. Sort all remaining keys alphabetically (party names).
       4. Write to the specified output CSV file.
 
     Args:
@@ -203,7 +226,7 @@ def save_to_csv(data, output_file, src_url):
     for item in data:
         keys.update(item.keys())
 
-    priority = ["Number", "Name", "Voters in the list", "Issued envelopes", "Valid votes"]
+    priority = ["Code", "Location", "Registered", "Envelopes", "Valid"]
     final_keys = []
 
     for pk in priority:
@@ -214,17 +237,19 @@ def save_to_csv(data, output_file, src_url):
     remainder = sorted(keys)
     final_keys.extend(remainder)
 
-    with open(output_file, mode="w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=final_keys, delimiter=';')
-        writer.writeheader()
-        writer.writerows(data)
+    try:
+        with open(output_file, mode="w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=final_keys, delimiter=';')
+            writer.writeheader()
+            writer.writerows(data)
 
-    print("-" * 50)
-    print(f"Data scraped from: {src_url}")
-    print(f"Saved to: {output_file}")
-    print("Program closed!")
-    print("-" * 50)
+        print(f"Data scraped from: {src_url}")
+        print(f"Saving to: {output_file}")
 
+    except PermissionError as e:
+        print(f"Error: Cannot write to file '{output_file}' – permission denied or read-only file.")
+        print(f"System message: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
