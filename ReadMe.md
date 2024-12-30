@@ -69,8 +69,8 @@ Program closed!
 
 The generated CSV file contains columns such as:
 
-- **Code** - Municipality code
-- **Location** - Municipality name
+- **Code** - Municipality code *(only included if the URL leads to a “list” page with multiple municipalities)*
+- **Location** - Municipality name *(only included if the URL leads to a “list” page with multiple municipalities)*
 - **Registered** - Number of registered voters
 - **Envelopes** - Number of issued envelopes
 - **Valid** - Number of valid votes
